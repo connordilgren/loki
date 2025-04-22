@@ -1,4 +1,4 @@
-from methods.pca_topk.attention_benchmark import benchmark_attention
+from methods.pca_topk.attention_benchmark_sparse import benchmark_attention
 import json
 import torch
 
@@ -17,11 +17,11 @@ if __name__ == "__main__":
                     print(f"prompt length = {prompt_length}, gen length = {num_gen_steps}, batch_size={16}, topk={topk} and topr={topr}")
                     times_pca_topk, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, vanilla=False)
                     #with open(f"prompt_{prompt_length}_gen_{num_gen_steps}_pca_topk_opt_first_matmul.json", "w") as f:
-                    with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json", "w") as f:
+                    with open(f"compute_files_sparse/prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json", "w") as f:
                         json.dump(times_pca_topk, f, indent=2)
 
             _, times_vanilla = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, pcatopk=False)
-            with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_vanilla.json", "w") as f:
+            with open(f"compute_files_sparse/prompt_{prompt_length}_gen_{num_gen_steps}_vanilla.json", "w") as f:
                 json.dump(times_vanilla, f, indent=2)
 
     
