@@ -10,15 +10,18 @@ torch.backends.cudnn.allow_tf32 = False
 
 if __name__ == "__main__":
     with torch.no_grad():
-        for prompt_length in [512, 1024]:
-            for num_gen_steps in [64, 128]:
+        # for prompt_length in [512, 1024]:
+        for prompt_length in [512]:
+            # for num_gen_steps in [64, 128]:
+            for num_gen_steps in [64]:
                 # does not depend on topk, topr, stride
                 print("Vanilla")
                 _, times_vanilla, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, pcatopk=False, sparse_transformer=False)
                 with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_vanilla.json", "w") as f:
                     json.dump(times_vanilla, f, indent=2)
 
-                for topk in [4, 8]:
+                # for topk in [4, 8]:
+                for topk in [8]:
                     for topr in [4]:
                         # does not depend on stride
                         print("Loki")
