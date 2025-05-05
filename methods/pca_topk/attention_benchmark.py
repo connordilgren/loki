@@ -380,6 +380,7 @@ def benchmark_attention(batch_size=1,
                         topk=256,
                         topr=32,
                         num_layers=32,
+                        stride=128,
                         dtype=torch.float16,
                         vanilla=True,
                         pcatopk=True,
@@ -450,15 +451,15 @@ def benchmark_attention(batch_size=1,
             for i in range(num_layers):
                 cache4.update(prompt_keys[i], prompt_keys[i], prompt_keys[i], i)
             timers = Timers()
-            micro_benchmark_pca_topk_fixed_sparse(cache4, prompt_keys, num_layers=num_layers, 
-                                         stride=128, num_gen_steps=num_gen_steps, timers=timers)
+            micro_benchmark_pca_topk_fixed_sparse(cache4, prompt_keys, topr, topk, num_layers=num_layers, 
+                                         stride=stride, num_gen_steps=num_gen_steps, use_optimised_gather=True, timers=timers)
             del cache4
             times = timers.get_times()
         print("Average time (minus cache updates) is - ")
         print(times['total'] - times['cache-update'], " s")
         print(times)
         print("==================================")
-        times_vanilla = times
+        times_sparse_transformer = times
 
 
     return times_pca_topk, times_vanilla, times_sparse_transformer
