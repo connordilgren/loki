@@ -23,6 +23,12 @@ def get_save_tensor_args(parser):
     parser.add_argument("--tensors-dir", type=str, default="./", help="file to save tensor to")
     return parser
 
+def get_sparse_transformer_args(parser):
+    parser.add_argument("--use-sparse-transformer-and-loki", action='store_true', default=False, help="use the Sparse Transformer + Lokialgos")
+    parser.add_argument("--stride", type=int, default=128, help="stride for sparse transformer")
+    parser.add_argument("--c", type=int, default=32, help="size of global context within a block")
+    return parser
+
 
 def get_modifier(args):
     if args.use_topk:
@@ -34,9 +40,12 @@ def get_modifier(args):
     elif args.use_pca_topk:
         method_name = "pca_topk"
         module_name = ".pca_topk.modify_" + args.model_type
+    elif args.use_sparse_transformer_and_loki:
+        method_name = "sparse_transformer_and_loki"
+        module_name = ".sparse_transformer_and_loki.modify_" + args.model_type
     else:
         return None
-      
+
     method_name = "make_" + args.model_type + "_attention_" + method_name
     module = import_module(module_name, package="methods")
     method = getattr(module, method_name)

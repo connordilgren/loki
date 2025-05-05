@@ -3,6 +3,7 @@ import torch
 import math
 import os
 import methods
+import numpy as np
 try:
     from axonn import axonn as ax
     from axonn.intra_layer import drop
@@ -143,3 +144,58 @@ def mask_attn_pca_topk(args, layer_idx, attn_weights, attention_mask, query_stat
 
 
     return mask, alpha
+
+
+def get_sparse_mask(stride, c, attn_shape):
+    """
+    Generate a boolean mask for sparse attention patterns.
+    For the first half of heads, use A1 (block) pattern:
+        A1: {j : floor(j/l) == floor(i/l)}
+    For the second half, use A2 (recent window) pattern:
+        A2: {j : j % l in {t, t+1, ..., l-1}}, where t = l - c
+    Returns:
+        mask: [batch, num_heads, query_len, key_len] (bool)
+    """
+    batch_size, num_heads, query_len, key_len = attn_shape
+    half_heads = num_heads // 2
+
+    # Indices for queries and keys
+    i_idx = torch.arange(query_len).view(1, 1, query_len, 1)
+    j_idx = torch.arange(key_len).view(1, 1, 1, key_len)
+    # i_idx = np.arange(query_len).reshape(1, 1, query_len, 1)
+    # j_idx = np.arange(key_len).reshape(1, 1, 1, key_len)
+
+    # A1: block mask
+    block_mask = ((i_idx // stride) == (j_idx // stride)) & (j_idx <= i_idx)
+    # A2: recent window mask
+    t = stride - c
+    window_mask = (j_idx % stride >= t) & (j_idx % stride < stride) & (j_idx <= i_idx)
+
+    # Combine masks for all heads
+    # For first half heads: use block_mask, for second half: use window_mask
+    mask = torch.zeros((1, num_heads, query_len, key_len), dtype=torch.bool)
+    # mask = np.zeros((1, num_heads, query_len, key_len), dtype=bool)
+    mask[:, :half_heads, :, :] = block_mask
+    mask[:, half_heads:, :, :] = window_mask
+
+    # Repeat for batch size
+    mask = mask.expand(batch_size, num_heads, query_len, key_len)
+    return mask
+
+
+if __name__ == "__main__":
+    # basic test for get_sparse_mask
+    stride = 10
+    c = 8
+    attn_shape = [1, 2, 100, 100]
+    mask = get_sparse_mask(stride, c, attn_shape)
+    query = 45
+    for head in range(2):
+        print(f"\nHead {head} (query={query}):")
+        # mask[batch, head, query, :]
+        m = mask[0, head, query, :].reshape(10, 10)
+        for row in range(10):
+            line = ''
+            for col in range(10):
+                line += '■' if m[row, col] else '□'
+            print(line)

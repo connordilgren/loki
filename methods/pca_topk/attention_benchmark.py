@@ -421,7 +421,7 @@ def benchmark_attention(batch_size=1,
         print("Average time (minus cache updates) is - ")
         print(times['total'] - times['cache-update'], " s")
         print("==================================")
-        times_pca_topk = times    
+        times_pca_topk = times
 
 
     times_vanilla = None

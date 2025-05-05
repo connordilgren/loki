@@ -1,5 +1,5 @@
 from methods import init_tensor_saver
-from methods.common.configure_model import get_h2o_args, get_topk_args, get_pca_args, get_save_tensor_args
+from methods.common.configure_model import get_h2o_args, get_topk_args, get_pca_args, get_save_tensor_args, get_sparse_transformer_args
 from methods.common.configure_model import get_modifier
 from methods import init_logger, finish_logger
 from methods.common.ppl import get_model, evaluate_ppl
@@ -37,6 +37,7 @@ if __name__ == "__main__":
     parser = get_topk_args(parser)
     parser = get_pca_args(parser)
     parser = get_save_tensor_args(parser)
+    parser = get_sparse_transformer_args(parser)
     args = parser.parse_args()
 
     if args.save_tensors:
