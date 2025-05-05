@@ -4,6 +4,8 @@ from transformers.cache_utils import Cache
 import math
 import time
 import torch
+import torch.nn as nn
+from torch.cuda.amp import autocast
 import methods.pca_topk.kernel.pca_topk as G
 from methods.common.timers import Timers
 import json
@@ -85,6 +87,19 @@ class PcaTopKCache(Cache): # Not used anymore
         self.key_cache: List[torch.Tensor] = [] 
         self.value_cache: List[torch.Tensor] = []
 
+
+class DenseAttentionProj(nn.Module):
+    def __init__(self, hidden_dim: int):
+        super().__init__()
+        self.q_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.k_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.v_proj = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, x):
+        with autocast():
+            return self.q_proj(x), self.k_proj(x), self.v_proj(x)
+
+
 def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timers,
                              num_gen_steps=2000, use_optimised_gather=False):
     import time
@@ -101,6 +116,8 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
     top_vals = torch.zeros(bs, num_heads, top_k, head_dim).to("cuda")
     pca_projection_mat = torch.randn(num_heads, head_dim, head_dim, dtype=dtype, device='cuda')
 
+    input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+    dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
 
     assert use_optimised_gather
     if use_optimised_gather:
@@ -108,8 +125,7 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
         for i in range(num_gen_steps):
             for layer in range(num_layers):
                 timers.start('qk-gen')
-                generative_query = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
-                generative_key = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+                generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
                 timers.stop('qk-gen')
 
                 timers.start('project')
@@ -118,7 +134,7 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.stop('project')
 
                 timers.start('cache-update')
-                keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
+                keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
                 timers.stop('cache-update')
 
                 timers.start('qk-matmul-1')
@@ -132,7 +148,6 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.start('top-k')
                 key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
                 timers.stop('top-k')
-
 
                 timers.start('reshape-0')
                 key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
@@ -166,6 +181,127 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.start('reshape-output')
                 attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
                 timers.stop('reshape-output')
+
+                input_embedding = attn_output
+
+        timers.stop('total')
+    else:
+      for i in range(num_gen_steps):
+            keys, vals = cache.update(generative_key, generative_key, generative_query, 0, False)
+            torch.cuda.synchronize()
+
+            start = time.time()
+            attn_weights = torch.matmul(generative_query[:,:,:,:top_r], keys.transpose(2, 3)[:,:,:top_r,:]) / math.sqrt(head_dim)
+            # Get top-k keys and top-k values based on the attention scores
+            key_states_topk_indices = torch.topk(attn_weights, top_k, dim=-1).indices.to("cuda")
+            key_states_topk_indices,_ = torch.sort(key_states_topk_indices, dim=-1)
+            key_states_topk_indices = key_states_topk_indices.transpose(-1, -2).expand(-1, -1, -1, head_dim)
+
+            torch.gather(keys, -2, key_states_topk_indices, out=top_keys)
+            torch.gather(vals, -2, key_states_topk_indices, out=top_vals)
+
+            attn_weights = torch.matmul(generative_query, top_keys.transpose(2, 3)) / math.sqrt(head_dim)
+            attn_weights = torch.softmax(attn_weights, dim=-1)
+            attn_output = torch.matmul(attn_weights, top_vals)
+            torch.cuda.synchronize()
+            end = time.time()
+
+
+def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_layers, timers,
+                                          stride=128, 
+                                          num_gen_steps=2000, use_optimised_gather=False):
+    import time
+    torch.set_float32_matmul_precision("highest")
+
+    head_dim = prompt_keys[0].shape[-1]
+    bs = prompt_keys[0].shape[0]
+    num_heads = prompt_keys[0].shape[1]
+    dtype = prompt_keys[0].dtype
+    prompt_seq_length = prompt_keys[0].shape[2]
+
+    matmul_time = 0
+    top_keys = torch.zeros(bs, num_heads, top_k, head_dim).to("cuda")
+    top_vals = torch.zeros(bs, num_heads, top_k, head_dim).to("cuda")
+    pca_projection_mat = torch.randn(num_heads, head_dim, head_dim, dtype=dtype, device='cuda')
+
+    input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+    dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
+
+    assert use_optimised_gather
+    if use_optimised_gather:
+        timers.start('total')
+        for i in range(num_gen_steps):
+            for layer in range(num_layers):
+
+                timers.start('qk-gen')
+                generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
+                timers.stop('qk-gen')
+
+                timers.start('project')
+                generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                timers.stop('project')
+
+                timers.start('cache-update')
+                keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
+                timers.stop('cache-update')
+
+                timers.start('fixed-keys')
+                # isoldate keys from sparse transformer
+                # in a real attention implementation, I'd use A1 and A2, each on half the heads
+                # but for benchmarking purposes, I'll just use A1 since they're the same compute time and it's simplier to implement just one
+                nh, bs, s, r = keys.shape
+                block_start = ((s - 1) // stride) * stride
+                block_end = min(block_start + stride, s)
+                keys = keys[:, :, block_start:block_end, :]
+                timers.stop('fixed-keys')
+
+                timers.start('qk-matmul-1')
+                attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
+                                                    r=top_r)
+                attn_weights = attn_weights.view(nh, bs, 1, s)
+                timers.stop('qk-matmul-1')
+
+                # Get top-k keys and top-k values based on the attention scores
+                timers.start('top-k')
+                key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
+                timers.stop('top-k')
+
+                timers.start('reshape-0')
+                key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
+                timers.stop('reshape-0')
+
+                timers.start('reshape-1')
+                keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
+                vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
+                timers.stop('reshape-1')
+
+                timers.start('qk-matmul-2')
+                attn_weights = G.gather_outer_bmv_optimized(
+                    generative_query.reshape(-1, 1, head_dim),
+                    keys.transpose(-1, -2),
+                    key_states_topk_indices,
+                    #.squeeze(0).squeeze(-1),
+                    #chunk=256
+                    #chunk=min(k2, 65536 // Q.shape[-1]),
+                ) / math.sqrt(head_dim)
+                timers.stop('qk-matmul-2')
+
+                timers.start('softmax')
+                attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+                timers.stop('softmax')
+
+                timers.start('sv-matmul')
+                attn_output = G.gather_inner_matrix_only_bmv_optimized(
+                    attn_weights, vals, key_states_topk_indices)
+                timers.stop('sv-matmul')
+
+                timers.start('reshape-output')
+                attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
+                timers.stop('reshape-output')
+
+                input_embedding = attn_output
+
         timers.stop('total')
     else:
       for i in range(num_gen_steps):
@@ -200,12 +336,15 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
 
     matmul_time = 0
 
+    dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
+
+    input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+
     timers.start('total')
     for i in range(num_gen_steps):
       for layer in range(num_layers):
           timers.start('qk-gen')
-          generative_query = torch.rand(bs, num_heads, 1, head_dim, dtype=dtype, device='cuda')
-          generative_key = torch.rand(bs, num_heads, 1, head_dim, dtype=dtype, device='cuda')
+          generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
           timers.stop('qk-gen')
           
           timers.start('cache-update')
@@ -227,6 +366,8 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
           timers.start('reshape-output')
           attn_output = attn_output.transpose(1, 2).contiguous()
           timers.stop('reshape-output')
+
+          input_embedding = attn_output
     
 
     timers.stop('total')
@@ -242,6 +383,7 @@ def benchmark_attention(batch_size=1,
                         dtype=torch.float16,
                         vanilla=True,
                         pcatopk=True,
+                        sparse_transformer=True,
                         ):
 
     head_dim=128
@@ -298,5 +440,25 @@ def benchmark_attention(batch_size=1,
         print(times)
         print("==================================")
         times_vanilla = times
-    return times_pca_topk, times_vanilla
 
+
+    times_sparse_transformer = None
+    if sparse_transformer:
+        print("Loki + Sparse Transformer Attention")
+        for _ in range(10):
+            cache4= PcaTopKCache()
+            for i in range(num_layers):
+                cache4.update(prompt_keys[i], prompt_keys[i], prompt_keys[i], i)
+            timers = Timers()
+            micro_benchmark_pca_topk_fixed_sparse(cache4, prompt_keys, num_layers=num_layers, 
+                                         stride=128, num_gen_steps=num_gen_steps, timers=timers)
+            del cache4
+            times = timers.get_times()
+        print("Average time (minus cache updates) is - ")
+        print(times['total'] - times['cache-update'], " s")
+        print(times)
+        print("==================================")
+        times_vanilla = times
+
+
+    return times_pca_topk, times_vanilla, times_sparse_transformer
