@@ -82,7 +82,8 @@ def evaluate_ppl(model_id="facebook/opt-350m",
 
     print (f"Using {dataset}")
     if dataset == "wikitext-test":
-        test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+        # test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+        test = load_from_disk('wikitext')["test"]
     elif dataset == "wikitext-valid":
         test = load_dataset("wikitext", "wikitext-2-raw-v1", split="validation")
     elif dataset == "c4":

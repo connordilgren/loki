@@ -8,3 +8,4 @@ logs/**
 examples/**/perlmutter/**
 .venv/
 downloaded_model/
+wikitext/
