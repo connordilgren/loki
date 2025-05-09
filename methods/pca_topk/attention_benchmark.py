@@ -128,61 +128,62 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
                 timers.stop('qk-gen')
 
-                timers.start('project')
-                generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
-                generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
-                timers.stop('project')
+                # timers.start('project')
+                # generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                # generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                # generative_value = generative_value.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                # timers.stop('project')
 
-                timers.start('cache-update')
-                keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
-                timers.stop('cache-update')
+                # timers.start('cache-update')
+                # keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
+                # timers.stop('cache-update')
 
-                timers.start('qk-matmul-1')
-                nh, bs, s, r = keys.shape
-                attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
-                                                    r=top_r)
-                attn_weights = attn_weights.view(nh, bs, 1, s)
-                timers.stop('qk-matmul-1')
+                # timers.start('qk-matmul-1')
+                # nh, bs, s, r = keys.shape
+                # attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
+                #                                     r=top_r)
+                # attn_weights = attn_weights.view(nh, bs, 1, s)
+                # timers.stop('qk-matmul-1')
 
-                # Get top-k keys and top-k values based on the attention scores
-                timers.start('top-k')
-                key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
-                timers.stop('top-k')
+                # # Get top-k keys and top-k values based on the attention scores
+                # timers.start('top-k')
+                # key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
+                # timers.stop('top-k')
 
-                timers.start('reshape-0')
-                key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
-                timers.stop('reshape-0')
+                # timers.start('reshape-0')
+                # key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
+                # timers.stop('reshape-0')
 
-                timers.start('reshape-1')
-                keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
-                vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
-                timers.stop('reshape-1')
+                # timers.start('reshape-1')
+                # keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
+                # vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
+                # timers.stop('reshape-1')
 
-                timers.start('qk-matmul-2')
-                attn_weights = G.gather_outer_bmv_optimized(
-                    generative_query.reshape(-1, 1, head_dim),
-                    keys.transpose(-1, -2),
-                    key_states_topk_indices,
-                    #.squeeze(0).squeeze(-1),
-                    #chunk=256
-                    #chunk=min(k2, 65536 // Q.shape[-1]),
-                ) / math.sqrt(head_dim)
-                timers.stop('qk-matmul-2')
+                # timers.start('qk-matmul-2')
+                # attn_weights = G.gather_outer_bmv_optimized(
+                #     generative_query.reshape(-1, 1, head_dim),
+                #     keys.transpose(-1, -2),
+                #     key_states_topk_indices,
+                #     #.squeeze(0).squeeze(-1),
+                #     #chunk=256
+                #     #chunk=min(k2, 65536 // Q.shape[-1]),
+                # ) / math.sqrt(head_dim)
+                # timers.stop('qk-matmul-2')
 
-                timers.start('softmax')
-                attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
-                timers.stop('softmax')
+                # timers.start('softmax')
+                # attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+                # timers.stop('softmax')
 
-                timers.start('sv-matmul')
-                attn_output = G.gather_inner_matrix_only_bmv_optimized(
-                    attn_weights, vals, key_states_topk_indices)
-                timers.stop('sv-matmul')
+                # timers.start('sv-matmul')
+                # attn_output = G.gather_inner_matrix_only_bmv_optimized(
+                #     attn_weights, vals, key_states_topk_indices)
+                # timers.stop('sv-matmul')
 
-                timers.start('reshape-output')
-                attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
-                timers.stop('reshape-output')
+                # timers.start('reshape-output')
+                # attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
+                # timers.stop('reshape-output')
 
-                input_embedding = attn_output
+                # input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
 
         timers.stop('total')
     else:
@@ -232,7 +233,6 @@ def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_
         timers.start('total')
         for i in range(num_gen_steps):
             for layer in range(num_layers):
-
                 timers.start('qk-gen')
                 generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
                 timers.stop('qk-gen')
@@ -240,6 +240,7 @@ def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_
                 timers.start('project')
                 generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
                 generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                generative_value = generative_value.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
                 timers.stop('project')
 
                 timers.start('cache-update')
@@ -257,6 +258,7 @@ def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_
                 timers.stop('fixed-keys')
 
                 timers.start('qk-matmul-1')
+                nh, bs, s, r = keys.shape
                 attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
                                                     r=top_r)
                 attn_weights = attn_weights.view(nh, bs, 1, s)
@@ -300,7 +302,7 @@ def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_
                 attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
                 timers.stop('reshape-output')
 
-                input_embedding = attn_output
+                input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
 
         timers.stop('total')
     else:
@@ -336,9 +338,8 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
 
     matmul_time = 0
 
-    dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
-
     input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+    dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
 
     timers.start('total')
     for i in range(num_gen_steps):
@@ -347,28 +348,27 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
           generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
           timers.stop('qk-gen')
           
-          timers.start('cache-update')
-          keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
-          timers.stop('cache-update')
+        #   timers.start('cache-update')
+        #   keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
+        #   timers.stop('cache-update')
 
-          timers.start('qk-matmul-1')
-          attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
-          timers.stop('qk-matmul-1')
+        #   timers.start('qk-matmul-1')
+        #   attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
+        #   timers.stop('qk-matmul-1')
 
-          timers.start('softmax')
-          attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
-          timers.stop('softmax')
+        #   timers.start('softmax')
+        #   attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+        #   timers.stop('softmax')
 
-          timers.start('sv-matmul')
-          attn_output = torch.matmul(attn_weights, vals)
-          timers.stop('sv-matmul')
+        #   timers.start('sv-matmul')
+        #   attn_output = torch.matmul(attn_weights, vals)
+        #   timers.stop('sv-matmul')
             
-          timers.start('reshape-output')
-          attn_output = attn_output.transpose(1, 2).contiguous()
-          timers.stop('reshape-output')
+        #   timers.start('reshape-output')
+        #   attn_output = attn_output.transpose(1, 2).contiguous()
+        #   timers.stop('reshape-output')
 
-          input_embedding = attn_output
-    
+        #   input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
 
     timers.stop('total')
 
@@ -420,6 +420,7 @@ def benchmark_attention(batch_size=1,
     
         print("Average time (minus cache updates) is - ")
         print(times['total'] - times['cache-update'], " s")
+        print(times)
         print("==================================")
         times_pca_topk = times
 
@@ -436,6 +437,8 @@ def benchmark_attention(batch_size=1,
                                          num_gen_steps=num_gen_steps, timers=timers)
             del cache3
             times = timers.get_times()
+            print(times)
+
         print("Average time (minus cache updates) is - ")
         print(times['total'] - times['cache-update'], " s")
         print(times)
@@ -449,12 +452,16 @@ def benchmark_attention(batch_size=1,
         for _ in range(10):
             cache4= PcaTopKCache()
             for i in range(num_layers):
-                cache4.update(prompt_keys[i], prompt_keys[i], prompt_keys[i], i)
+                cache4.update(prompt_keys[i].transpose(0,1).contiguous(), 
+                              prompt_keys[i].transpose(0,1).contiguous(), 
+                              prompt_keys[i].transpose(0,1).contiguous(), i)
             timers = Timers()
             micro_benchmark_pca_topk_fixed_sparse(cache4, prompt_keys, topr, topk, num_layers=num_layers, 
                                          stride=stride, num_gen_steps=num_gen_steps, use_optimised_gather=True, timers=timers)
             del cache4
             times = timers.get_times()
+            print(times)
+
         print("Average time (minus cache updates) is - ")
         print(times['total'] - times['cache-update'], " s")
         print(times)

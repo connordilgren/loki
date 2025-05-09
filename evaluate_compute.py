@@ -16,8 +16,8 @@ if __name__ == "__main__":
             for num_gen_steps in [64]:
                 # does not depend on topk, topr, stride
                 print("Vanilla")
-                _, times_vanilla, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, pcatopk=False, sparse_transformer=False)
-                with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_vanilla.json", "w") as f:
+                _, times_vanilla, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, pcatopk=False, sparse_transformer=False)
+                with open(f"compute_files/vanilla_prompt_{prompt_length}_gen_{num_gen_steps}.json", "w") as f:
                     json.dump(times_vanilla, f, indent=2)
 
                 # for topk in [4, 8]:
@@ -27,12 +27,12 @@ if __name__ == "__main__":
                         print("Loki")
                         print(f"prompt length = {prompt_length}, gen length = {num_gen_steps}, batch_size={16}, topk={topk} and topr={topr}")
                         times_pca_topk, _, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, vanilla=False, sparse_transformer=False)
-                        with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json", "w") as f:
+                        with open(f"compute_files/loki_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json", "w") as f:
                             json.dump(times_pca_topk, f, indent=2)
 
-                        for stride in [128]:
-                            print("Sparse Transformer + Loki")
-                            print(f"prompt length = {prompt_length}, gen length = {num_gen_steps}, batch_size={16}, topk={topk} and topr={topr}, stride={stride}")
-                            _, _, times_sparse_pca_topk = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, stride=stride, pcatopk=False, vanilla=False)
-                            with open(f"compute_files/prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}_stride_{stride}.json", "w") as f:
-                                json.dump(times_sparse_pca_topk, f, indent=2)
+                        # for stride in [128]:
+                        #     print("Sparse Transformer + Loki")
+                        #     print(f"prompt length = {prompt_length}, gen length = {num_gen_steps}, batch_size={16}, topk={topk} and topr={topr}, stride={stride}")
+                        #     _, _, times_sparse_pca_topk = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, stride=stride, pcatopk=False, vanilla=False)
+                        #     with open(f"compute_files/sparse_transformer_loki_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}_stride_{stride}.json", "w") as f:
+                        #         json.dump(times_sparse_pca_topk, f, indent=2)
