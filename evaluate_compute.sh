@@ -8,7 +8,7 @@
 #SBATCH --time=00:04:00            # Time limit (HH:MM:SS)
 #SBATCH --partition=gpu            # Partition/queue name
 #SBATCH --account=cmsc828-class
-#SBATCH --gpus=a100_1g.5gb:1          # Request specific GPU type
+#SBATCH --gpus=a100:1          # Request specific GPU type
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=cdilgren@umd.edu
 
@@ -17,7 +17,7 @@ module purge
 module load cuda/12.3.0/gcc/11.3.0/x86_64
 
 # Activate virtual environment
-source /scratch/zt1/project/cmsc828/user/cdilgren/loki
+source /scratch/zt1/project/cmsc828/user/cdilgren/loki/.venv/bin/activate
 
 # Run the Python script with your arguments
 python evaluate_compute.py
