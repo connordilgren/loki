@@ -20,7 +20,7 @@ module load cuda/12.3.0/gcc/11.3.0/x86_64
 source /scratch/zt1/project/cmsc828/user/cdilgren/loki/.venv/bin/activate
 
 # set triton cache dir
-TRITON_CACHE_DIR=/scratch/zt1/project/cmsc828/user/cdilgren/loki/triton_cache
+export TRITON_CACHE_DIR=/scratch/zt1/project/cmsc828/user/cdilgren/loki/triton_cache
 
 # Run the Python script with your arguments
 python evaluate_compute.py
