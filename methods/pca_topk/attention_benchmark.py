@@ -343,32 +343,32 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
 
     timers.start('total')
     for i in range(num_gen_steps):
-      for layer in range(num_layers):
-          timers.start('qk-gen')
-          generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
-          timers.stop('qk-gen')
-          
-          timers.start('cache-update')
-          keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
-          timers.stop('cache-update')
+        for layer in range(num_layers):
+            timers.start('qk-gen')
+            generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
+            timers.stop('qk-gen')
 
-          timers.start('qk-matmul-1')
-          attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
-          timers.stop('qk-matmul-1')
+            timers.start('cache-update')
+            keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
+            timers.stop('cache-update')
 
-          timers.start('softmax')
-          attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
-          timers.stop('softmax')
+            timers.start('qk-matmul-1')
+            attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
+            timers.stop('qk-matmul-1')
 
-          timers.start('sv-matmul')
-          attn_output = torch.matmul(attn_weights, vals)
-          timers.stop('sv-matmul')
-            
-          timers.start('reshape-output')
-          attn_output = attn_output.transpose(1, 2).contiguous()
-          timers.stop('reshape-output')
+            timers.start('softmax')
+            attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+            timers.stop('softmax')
 
-          input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
+            timers.start('sv-matmul')
+            attn_output = torch.matmul(attn_weights, vals)
+            timers.stop('sv-matmul')
+
+            timers.start('reshape-output')
+            attn_output = attn_output.transpose(1, 2).contiguous()
+            timers.stop('reshape-output')
+
+            input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
 
     timers.stop('total')
 
