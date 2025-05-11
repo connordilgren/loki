@@ -103,6 +103,7 @@ if __name__ == "__main__":
         if args.model_id == "mistralai/Mixtral-8x22B-v0.1" or args.use_h2o:
             use_axonn_low_level_api = False
 
+        print('running ppl')
         ppl = evaluate_ppl(model_id=args.model_id,
                     dataset=args.dataset,
                     sequence_length=args.sequence_length,

@@ -24,6 +24,7 @@ def get_save_tensor_args(parser):
     return parser
 
 def get_sparse_transformer_args(parser):
+    print("getting sparse transformer args")
     parser.add_argument("--use-sparse-transformer-and-loki", action='store_true', default=False, help="use the Sparse Transformer + Lokialgos")
     parser.add_argument("--stride", type=int, default=128, help="stride for sparse transformer")
     parser.add_argument("--c", type=int, default=32, help="size of global context within a block")
@@ -41,6 +42,7 @@ def get_modifier(args):
         method_name = "pca_topk"
         module_name = ".pca_topk.modify_" + args.model_type
     elif args.use_sparse_transformer_and_loki:
+        print("setting sparse transformer and loki forward method")
         method_name = "sparse_transformer_and_loki"
         module_name = ".sparse_transformer_and_loki.modify_" + args.model_type
     else:

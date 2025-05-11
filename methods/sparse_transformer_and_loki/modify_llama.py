@@ -257,8 +257,9 @@ def make_llama_attention_sparse_transformer(args):
 
     LlamaAttention.forward = get_sparse_transformer_forward(args)
 
-# Load and subsample Alpaca
-dataset = load_dataset("tatsu-lab/alpaca", split="train")
-small_dataset = dataset.shuffle(seed=42).select(range(5000))  # 5k examples
+if __name__ == "__main__":
+    # Load and subsample Alpaca
+    dataset = load_dataset("tatsu-lab/alpaca", split="train")
+    small_dataset = dataset.shuffle(seed=42).select(range(5000))  # 5k examples
 
 # Prepare for Trainer (tokenization, etc.)

@@ -78,13 +78,19 @@ def evaluate_ppl(model_id="facebook/opt-350m",
             axonn_low_level_api=True,
             return_model=False):
     model_id = "./models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9"
+    print("getting model")
     model = get_model(model_id=model_id, device=device, dtype=dtype, use_axonn=use_axonn, axonn_low_level_api=axonn_low_level_api)
+    print("got model")
+    print("getting tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    print("got tokenizer")
 
     print (f"Using {dataset}")
     if dataset == "wikitext-test":
         # test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+        print("loading wikitext")
         test = load_from_disk('wikitext')["test"]
+        print("loaded wikitext")
     elif dataset == "wikitext-valid":
         test = load_dataset("wikitext", "wikitext-2-raw-v1", split="validation")
     elif dataset == "c4":
