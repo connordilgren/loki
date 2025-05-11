@@ -77,6 +77,7 @@ def evaluate_ppl(model_id="facebook/opt-350m",
             past_key_values=None,
             axonn_low_level_api=True,
             return_model=False):
+    model_id = "./models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9"
     model = get_model(model_id=model_id, device=device, dtype=dtype, use_axonn=use_axonn, axonn_low_level_api=axonn_low_level_api)
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
