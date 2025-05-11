@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1                 # Number of tasks
 #SBATCH --cpus-per-task=4          # CPU cores per task
 #SBATCH --mem=32G                  # Memory requirement
-#SBATCH --time=00:09:00            # Time limit (HH:MM:SS)
+#SBATCH --time=00:04:00            # Time limit (HH:MM:SS)
 #SBATCH --partition=gpu            # Partition/queue name
 #SBATCH --account=cmsc828-class
 #SBATCH --gpus=a100:1          # Request specific GPU type

@@ -1,4 +1,3 @@
-
 from typing import Any, Dict, List, Optional, Tuple
 from transformers.cache_utils import Cache
 import math
@@ -139,10 +138,13 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.stop('cache-update')
 
                 timers.start('qk-matmul-1')
-                nh, bs, s, r = keys.shape
-                attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
-                                                    r=top_r)
-                attn_weights = attn_weights.view(nh, bs, 1, s)
+                # nh, bs, s, r = keys.shape
+                # attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
+                #                                     r=top_r)
+                # attn_weights = attn_weights.view(nh, bs, 1, s)
+                query_topr = generative_query[..., :top_r]  # (num_heads, bs, 1, top_r)
+                keys_topr = keys[..., :top_r]    # (num_heads, bs, seq, top_r)
+                attn_weights = torch.matmul(query_topr, keys_topr.transpose(2, 3)) / math.sqrt(head_dim)
                 timers.stop('qk-matmul-1')
 
                 # Get top-k keys and top-k values based on the attention scores
@@ -151,23 +153,26 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.stop('top-k')
 
                 timers.start('reshape-0')
-                key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
+                # key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
                 timers.stop('reshape-0')
 
                 timers.start('reshape-1')
-                keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
-                vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
+                # keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
+                # vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
                 timers.stop('reshape-1')
 
                 timers.start('qk-matmul-2')
-                attn_weights = G.gather_outer_bmv_optimized(
-                    generative_query.reshape(-1, 1, head_dim),
-                    keys.transpose(-1, -2),
-                    key_states_topk_indices,
-                    #.squeeze(0).squeeze(-1),
-                    #chunk=256
-                    #chunk=min(k2, 65536 // Q.shape[-1]),
-                ) / math.sqrt(head_dim)
+                # attn_weights = G.gather_outer_bmv_optimized(
+                #     generative_query.reshape(-1, 1, head_dim),
+                #     keys.transpose(-1, -2),
+                #     key_states_topk_indices,
+                #     #.squeeze(0).squeeze(-1),
+                #     #chunk=256
+                #     #chunk=min(k2, 65536 // Q.shape[-1]),
+                # ) / math.sqrt(head_dim)
+                expanded_indices = key_states_topk_indices.unsqueeze(-1).expand(-1, -1, -1, -1, keys.shape[-1])
+                keys_topk = torch.gather(keys.unsqueeze(2), 3, expanded_indices).squeeze(2)
+                attn_weights = torch.matmul(generative_query, keys_topk.transpose(2, 3)) / math.sqrt(head_dim)
                 timers.stop('qk-matmul-2')
 
                 timers.start('softmax')
@@ -175,15 +180,16 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
                 timers.stop('softmax')
 
                 timers.start('sv-matmul')
-                attn_output = G.gather_inner_matrix_only_bmv_optimized(
-                    attn_weights, vals, key_states_topk_indices)
+                # Gather the top-k vals using the same indices as for keys
+                vals_topk = torch.gather(vals.unsqueeze(2), 3, expanded_indices).squeeze(2)  # (num_heads, bs, top_k, head_dim)
+                attn_output = torch.matmul(attn_weights, vals_topk)  # (num_heads, bs, 1, head_dim)
                 timers.stop('sv-matmul')
 
                 timers.start('reshape-output')
-                attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
+                # attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
                 timers.stop('reshape-output')
 
-                input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
+                input_embedding = attn_output.transpose(0, 1).contiguous()  # reset the shape to the original shape
 
         timers.stop('total')
     else:
@@ -294,8 +300,10 @@ def micro_benchmark_pca_topk_fixed_sparse(cache, prompt_keys, top_r, top_k, num_
                 timers.stop('softmax')
 
                 timers.start('sv-matmul')
-                attn_output = G.gather_inner_matrix_only_bmv_optimized(
-                    attn_weights, vals, key_states_topk_indices)
+                # Gather the top-k vals using the same indices as for keys
+                expanded_val_indices = key_states_topk_indices.unsqueeze(-1).expand(-1, -1, -1, -1, vals.shape[-1])
+                vals_topk = torch.gather(vals.unsqueeze(2), 3, expanded_val_indices).squeeze(2)  # (num_heads, bs, top_k, head_dim)
+                attn_output = torch.matmul(attn_weights, vals_topk)  # (num_heads, bs, 1, head_dim)
                 timers.stop('sv-matmul')
 
                 timers.start('reshape-output')
