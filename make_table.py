@@ -92,10 +92,9 @@ for key in all_keys:
         row.append(val)
     rows.append(row)
 
-# Move run_type to the last (bottom) level of the MultiIndex
 multi_index = pd.MultiIndex.from_tuples(
-    [(c[1], c[2], c[3], c[4], c[5], c[0]) for c in columns],
-    names=['prompt_length', 'gen_steps', 'topk', 'topr', 'stride', 'run_type']
+    columns,
+    names=['run_type', 'prompt_length', 'gen_steps', 'topk', 'topr', 'stride']
 )
 df = pd.DataFrame(rows, index=all_keys, columns=multi_index)
 
