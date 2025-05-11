@@ -25,7 +25,7 @@ if __name__ == "__main__":
                         with open(f"compute_files/loki_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json", "w") as f:
                             json.dump(times_pca_topk, f, indent=2)
 
-                        for stride in [128, 256, 512]:
+                        for stride in [128, 512]:
                             print(f"prompt length = {prompt_length}, gen length = {num_gen_steps}, batch_size={16}, topk={topk} and topr={topr}, stride={stride}")
                             _, _, times_sparse_pca_topk = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, topk=prompt_length // topk, topr=128 // topr, stride=stride, pcatopk=False, vanilla=False)
                             with open(f"compute_files/sparse_transformer_loki_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}_stride_{stride}.json", "w") as f:
