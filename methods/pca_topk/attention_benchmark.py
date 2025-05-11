@@ -115,95 +115,83 @@ def micro_benchmark_pca_topk(cache, prompt_keys, top_r, top_k, num_layers, timer
     top_vals = torch.zeros(bs, num_heads, top_k, head_dim).to("cuda")
     pca_projection_mat = torch.randn(num_heads, head_dim, head_dim, dtype=dtype, device='cuda')
 
-    torch.manual_seed(42)
-    input_embedding_original = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+    input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
     dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
 
     assert use_optimised_gather
     if use_optimised_gather:
         timers.start('total')
-        for sync in [True, False]:
-            print(f"Sync: {sync}")
-            input_embedding = input_embedding_original.clone()
-            print(input_embedding[0,0,0,:10])
+        for i in range(num_gen_steps):
+            for layer in range(num_layers):
+                timers.start('qk-gen')
+                generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
+                timers.stop('qk-gen')
 
-            # for i in range(num_gen_steps):
-            for i in range(1):
-                print(f"Step: {i}")
-                # for layer in range(num_layers):
-                for layer in range(2):
-                    print(f"Layer: {layer}")
-                    timers.start('qk-gen', sync=sync)
-                    generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
-                    timers.stop('qk-gen', sync=sync)
+                timers.start('project')
+                generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                generative_value = generative_value.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
+                timers.stop('project')
 
-                    timers.start('project', sync=sync)
-                    generative_key = generative_key.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
-                    generative_query = generative_query.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
-                    generative_value = generative_value.squeeze().transpose(0, 1).bmm(pca_projection_mat).unsqueeze(2)
-                    timers.stop('project', sync=sync)
+                timers.start('cache-update')
+                keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
+                timers.stop('cache-update')
 
-                    print(generative_query[0,0,0,:10])
+                timers.start('qk-matmul-1')
+                # nh, bs, s, r = keys.shape
+                # attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
+                #                                     r=top_r)
+                # attn_weights = attn_weights.view(nh, bs, 1, s)
+                query_topr = generative_query[..., :top_r]  # (num_heads, bs, 1, top_r)
+                keys_topr = keys[..., :top_r]    # (num_heads, bs, seq, top_r)
+                attn_weights = torch.matmul(query_topr, keys_topr.transpose(2, 3)) / math.sqrt(head_dim)
+                timers.stop('qk-matmul-1')
 
-                    timers.start('cache-update', sync=sync)
-                    keys, vals = cache.update(generative_key, generative_value, generative_query, layer, False)
-                    timers.stop('cache-update', sync=sync)
+                # Get top-k keys and top-k values based on the attention scores
+                timers.start('top-k')
+                key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
+                timers.stop('top-k')
 
-                    timers.start('qk-matmul-1', sync=sync)
-                    # nh, bs, s, r = keys.shape
-                    # attn_weights = G.topr_bmv_optimized(A=generative_query.view(nh*bs, 1, r), B=keys.view(nh*bs, s, r).transpose(-1,-2), 
-                    #                                     r=top_r)
-                    # attn_weights = attn_weights.view(nh, bs, 1, s)
-                    query_topr = generative_query[..., :top_r]  # (num_heads, bs, 1, top_r)
-                    keys_topr = keys[..., :top_r]    # (num_heads, bs, seq, top_r)
-                    attn_weights = torch.matmul(query_topr, keys_topr.transpose(2, 3)) / math.sqrt(head_dim)
-                    timers.stop('qk-matmul-1', sync=sync)
+                # timers.start('reshape-0')
+                # key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
+                # timers.stop('reshape-0')
 
-                    # Get top-k keys and top-k values based on the attention scores
-                    timers.start('top-k', sync=sync)
-                    key_states_topk_indices = torch.argsort(attn_weights, dim=-1, descending=True)[:,:,:,:top_k]
-                    timers.stop('top-k', sync=sync)
+                # timers.start('reshape-1')
+                # keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
+                # vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
+                # timers.stop('reshape-1')
 
-                    # timers.start('reshape-0')
-                    # key_states_topk_indices= key_states_topk_indices.reshape(-1, key_states_topk_indices.shape[-1])
-                    # timers.stop('reshape-0')
+                timers.start('qk-matmul-2')
+                # attn_weights = G.gather_outer_bmv_optimized(
+                #     generative_query.reshape(-1, 1, head_dim),
+                #     keys.transpose(-1, -2),
+                #     key_states_topk_indices,
+                #     #.squeeze(0).squeeze(-1),
+                #     #chunk=256
+                #     #chunk=min(k2, 65536 // Q.shape[-1]),
+                # ) / math.sqrt(head_dim)
+                expanded_indices = key_states_topk_indices.unsqueeze(-1).expand(-1, -1, -1, -1, keys.shape[-1])
+                keys_topk = torch.gather(keys.unsqueeze(2), 3, expanded_indices).squeeze(2)
+                attn_weights = torch.matmul(generative_query, keys_topk.transpose(2, 3)) / math.sqrt(head_dim)
+                timers.stop('qk-matmul-2')
 
-                    # timers.start('reshape-1')
-                    # keys = keys.view(-1, keys.shape[-2] , keys.shape[-1])
-                    # vals = vals.view(-1, vals.shape[-2] , vals.shape[-1])
-                    # timers.stop('reshape-1')
+                timers.start('softmax')
+                attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+                timers.stop('softmax')
 
-                    timers.start('qk-matmul-2', sync=sync)
-                    # attn_weights = G.gather_outer_bmv_optimized(
-                    #     generative_query.reshape(-1, 1, head_dim),
-                    #     keys.transpose(-1, -2),
-                    #     key_states_topk_indices,
-                    #     #.squeeze(0).squeeze(-1),
-                    #     #chunk=256
-                    #     #chunk=min(k2, 65536 // Q.shape[-1]),
-                    # ) / math.sqrt(head_dim)
-                    expanded_indices = key_states_topk_indices.unsqueeze(-1).expand(-1, -1, -1, -1, keys.shape[-1])
-                    keys_topk = torch.gather(keys.unsqueeze(2), 3, expanded_indices).squeeze(2)
-                    attn_weights = torch.matmul(generative_query, keys_topk.transpose(2, 3)) / math.sqrt(head_dim)
-                    timers.stop('qk-matmul-2', sync=sync)
+                timers.start('sv-matmul')
+                # Gather the top-k vals using the same indices as for keys
+                vals_topk = torch.gather(vals.unsqueeze(2), 3, expanded_indices).squeeze(2)  # (num_heads, bs, top_k, head_dim)
+                attn_output = torch.matmul(attn_weights, vals_topk)  # (num_heads, bs, 1, head_dim)
+                timers.stop('sv-matmul')
 
-                    timers.start('softmax', sync=sync)
-                    attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
-                    timers.stop('softmax', sync=sync)
+                # timers.start('reshape-output')
+                # attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
+                # timers.stop('reshape-output')
 
-                    timers.start('sv-matmul', sync=sync)
-                    # Gather the top-k vals using the same indices as for keys
-                    vals_topk = torch.gather(vals.unsqueeze(2), 3, expanded_indices).squeeze(2)  # (num_heads, bs, top_k, head_dim)
-                    attn_output = torch.matmul(attn_weights, vals_topk)  # (num_heads, bs, 1, head_dim)
-                    timers.stop('sv-matmul', sync=sync)
+                input_embedding = attn_output.transpose(0, 1).contiguous()  # reset the shape to the original shape
 
-                    # timers.start('reshape-output')
-                    # attn_output = attn_output.view(num_heads, bs, 1, head_dim).transpose(0,1).transpose(1,2).contiguous()
-                    # timers.stop('reshape-output')
-
-                    input_embedding = attn_output.transpose(0, 1).contiguous()  # reset the shape to the original shape
-
-        timers.stop('total', sync=sync)
+        timers.stop('total')
     else:
       for i in range(num_gen_steps):
             keys, vals = cache.update(generative_key, generative_key, generative_query, 0, False)
@@ -363,49 +351,37 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
 
     matmul_time = 0
 
-    torch.manual_seed(42)
-    input_embedding_original = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
+    input_embedding = torch.rand(bs, num_heads, 1, head_dim, device='cuda', dtype=dtype)
     dense_projs = [DenseAttentionProj(head_dim).to("cuda") for _ in range(num_layers)]
 
     timers.start('total')
-    for sync in [True, False]:
-        print(f"Sync: {sync}")
-        input_embedding = input_embedding_original.clone()
-        print(input_embedding[0,0,0,:10])
+    for i in range(num_gen_steps):
+        for layer in range(num_layers):
+            timers.start('qk-gen')
+            generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
+            timers.stop('qk-gen')
 
-        # for i in range(num_gen_steps):
-        for i in range(1):
-            print(f"Step: {i}")
-            # for layer in range(num_layers):
-            for layer in range(2):
-                print(f"Layer: {layer}")
-                timers.start('qk-gen', sync=sync)
-                generative_query, generative_key, generative_value = dense_projs[layer](input_embedding)
-                timers.stop('qk-gen', sync=sync)
+            timers.start('cache-update')
+            keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
+            timers.stop('cache-update')
 
-                print(generative_query[0,0,0,:10])
+            timers.start('qk-matmul-1')
+            attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
+            timers.stop('qk-matmul-1')
 
-                timers.start('cache-update', sync=sync)
-                keys, vals = cache.update(generative_key, generative_key, generative_query, layer, False)
-                timers.stop('cache-update', sync=sync)
+            timers.start('softmax')
+            attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
+            timers.stop('softmax')
 
-                timers.start('qk-matmul-1', sync=sync)
-                attn_weights = torch.matmul(generative_query, keys.transpose(2, 3)) / math.sqrt(head_dim)
-                timers.stop('qk-matmul-1', sync=sync)
+            timers.start('sv-matmul')
+            attn_output = torch.matmul(attn_weights, vals)
+            timers.stop('sv-matmul')
 
-                timers.start('softmax', sync=sync)
-                attn_weights = torch.softmax(attn_weights.float(), dim=-1).to(dtype)
-                timers.stop('softmax', sync=sync)
+            timers.start('reshape-output')
+            attn_output = attn_output.transpose(1, 2).contiguous()
+            timers.stop('reshape-output')
 
-                timers.start('sv-matmul', sync=sync)
-                attn_output = torch.matmul(attn_weights, vals)
-                timers.stop('sv-matmul', sync=sync)
-
-                timers.start('reshape-output', sync=sync)
-                attn_output = attn_output.transpose(1, 2).contiguous()
-                timers.stop('reshape-output', sync=sync)
-
-                input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
+            input_embedding = attn_output.transpose(1, 2).contiguous()  # reset the shape to the original shape
 
     timers.stop('total')
 
