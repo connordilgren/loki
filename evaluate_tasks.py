@@ -23,6 +23,7 @@ LM_HARNESS_TASKS = {
 }
 
 if __name__ == "__main__":
+    print("starting main")
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-id", type=str, default="facebook/opt-350m", help="huggingface model to use")
     parser.add_argument("--model-type", type=str, default="opt", help="model type - opt, llama, gpt-neo")
@@ -33,6 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--use-wandb", action='store_true', default=False, help="use wandb")
 
     # Get Method Specific Arguments
+    print("getting method specific args")
     parser = get_h2o_args(parser)
     parser = get_topk_args(parser)
     parser = get_pca_args(parser)
@@ -45,6 +47,7 @@ if __name__ == "__main__":
 
     init_logger(args)
 
+    print("getting modifier method")
     modifier_method = get_modifier(args)
     if modifier_method is None:
         print ("[INFO] Running Base HF Model without any modification")
