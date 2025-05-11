@@ -1,11 +1,18 @@
+print("importing methods")
 from methods import init_tensor_saver
+print("importing configure model")  
 from methods.common.configure_model import get_h2o_args, get_topk_args, get_pca_args, get_save_tensor_args, get_sparse_transformer_args
+print("importing configure model modifier")
 from methods.common.configure_model import get_modifier
+print("importing logger")
 from methods import init_logger, finish_logger
+print("importing ppl")
 from methods.common.ppl import get_model, evaluate_ppl
+print("importing methods")
 import methods
-
+print("importing argparse")
 import argparse
+print("importing os")
 import os
 
 # Required to avoid tokenizers warning
