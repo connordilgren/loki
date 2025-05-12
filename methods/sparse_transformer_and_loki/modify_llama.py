@@ -93,10 +93,10 @@ def get_sparse_transformer_and_loki_forward(args):
             attn_weights = attn_weights + causal_mask
 
         # get sparse mask for each head
-        sparse_mask = get_sparse_mask(args.stride, args.c, attn_weights.shape)  # [batch_size, num_heads, query_len, key_len]
+        sparse_mask = get_sparse_mask(args.stride, args.c, attn_weights.shape).to(attn_weights.device)  # [batch_size, num_heads, query_len, key_len]
 
         # apply mask to the attention weights
-        attn_weights = attn_weights.masked_fill(~sparse_mask, float("-inf")).to(attn_weights.device)
+        attn_weights = attn_weights.masked_fill(~sparse_mask, float("-inf"))
 
         if args.top_k <= 1:
             topk = int(args.top_k * attn_weights.shape[-1])
@@ -202,10 +202,10 @@ def get_sparse_transformer_forward(args):
             attn_weights = attn_weights + causal_mask
 
         # get sparse mask for each head
-        sparse_mask = get_sparse_mask(args.stride, args.c, attn_weights.shape)  # [batch_size, num_heads, query_len, key_len]
+        sparse_mask = get_sparse_mask(args.stride, args.c, attn_weights.shape).to(attn_weights.device)  # [batch_size, num_heads, query_len, key_len]
 
         # apply mask to the attention weights
-        attn_weights = attn_weights.masked_fill(~sparse_mask, float("-inf")).to(attn_weights.device)
+        attn_weights = attn_weights.masked_fill(~sparse_mask, float("-inf"))
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
