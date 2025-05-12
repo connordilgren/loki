@@ -5,10 +5,10 @@
 #SBATCH --ntasks=1                 # Number of tasks
 #SBATCH --cpus-per-task=4          # CPU cores per task
 #SBATCH --mem=32G                  # Memory requirement
-#SBATCH --time=00:04:00            # Time limit (HH:MM:SS)
+#SBATCH --time=00:09:00            # Time limit (HH:MM:SS)
 #SBATCH --partition=gpu            # Partition/queue name
 #SBATCH --account=cmsc828-class
-#SBATCH --gpus=a100_1g.5gb:1          # Request specific GPU type
+#SBATCH --gpus=a100:1          # Request specific GPU type
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=cdilgren@umd.edu
 
@@ -17,17 +17,20 @@ module purge
 module load cuda/12.3.0/gcc/11.3.0/x86_64
 
 # Activate virtual environment
-source /scratch/zt1/project/cmsc828/user/cdilgren/loki
+source /scratch/zt1/project/cmsc828/user/cdilgren/loki/.venv/bin/activate
 
 # Run the Python script with your arguments
 python -u evaluate_tasks.py \
     --model-id meta-llama/Llama-2-7b-hf \
     --sequence-length 128 \
     --dataset wikitext-test \
+    --transform-dataset wikitext \
     --model-type llama \
     --use-sparse-transformer-and-loki \
     --top-r 32 \
-    --top-k 0.125 \
-    --rotary-type postrotary
+    --top-k 0.25 \
+    --stride 128 \
+    --c 32 \
+    --rotary-type prerotary
 
 # End of script
