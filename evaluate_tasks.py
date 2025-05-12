@@ -54,6 +54,9 @@ if __name__ == "__main__":
 
     init_logger(args)
 
+    for arg, value in vars(args).items():
+        print(f"{arg}: {value}")
+
     print("getting modifier method")
     modifier_method = get_modifier(args)
     if modifier_method is None:
