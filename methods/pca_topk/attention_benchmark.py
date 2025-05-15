@@ -299,4 +299,3 @@ def benchmark_attention(batch_size=1,
         print("==================================")
         times_vanilla = times
     return times_pca_topk, times_vanilla
-

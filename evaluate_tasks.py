@@ -14,12 +14,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Hugging Face OpenLLM Tasks and associated metrics from May 2024
 # https://huggingface.co/spaces/open-llm-leaderboard-old/open_llm_leaderboard
 LM_HARNESS_TASKS = {
-  "mmlu" : "acc,none",
-  "gsm8k" : "exact_match,strict-match",
-  "hellaswag" : "acc_norm,none",
-  "winogrande" : "acc,none",
-  "truthfulqa_mc2" : "acc,none",
-  "arc_challenge" : "acc_norm,none"
+    "gpqa":    "acc,acc_norm",         # GPQA reports accuracy and normalized accuracy :contentReference[oaicite:0]{index=0}
+    "gsm8k":   "exact_match,strict-match",  # GSM8K uses exact-match with the strict-match filter :contentReference[oaicite:1]{index=1}
+    "mmlu":    "acc,none",             # MMLU reports only accuracy (no secondary metric) :contentReference[oaicite:2]{index=2}
+    "ruler_qa_hotpot":"exact_match,f1",       # HotpotQA uses exact match and F1 overlap :contentReference[oaicite:3]{index=3}
 }
 
 if __name__ == "__main__":
@@ -45,6 +43,7 @@ if __name__ == "__main__":
     init_logger(args)
 
     modifier_method = get_modifier(args)
+    
     if modifier_method is None:
         print ("[INFO] Running Base HF Model without any modification")
     else:
@@ -75,21 +74,41 @@ if __name__ == "__main__":
             results = lm_eval.simple_evaluate(
                 model = "hf",
                 model_args={"pretrained": model},
-                tasks = LM_HARNESS_TASKS.keys(),
+                tasks = list(LM_HARNESS_TASKS.keys()),
                 log_samples=False,
                 batch_size=8
             )
         else:
+            
             results = lm_eval.simple_evaluate(
                 model = "hf",
                 model_args=f"pretrained={args.model_id}",
-                tasks = LM_HARNESS_TASKS.keys(),
-                log_samples=False,
-                batch_size=16
+                tasks = list(LM_HARNESS_TASKS.keys()),
+                 limit = 100,
+                log_samples=True,  # Enables logging of per-sample outputs
+                #output_path="/ephemeral/purva_exp/loki/output_loki", 
+                batch_size=8,
             )
 
         if results is not None:
             print(results["results"])
+            import json, os
+            # make sure the user provided an output directory (or fallback)
+            out_dir ="/ephemeral/purva_exp/loki/output_loki"
+            os.makedirs(out_dir, exist_ok=True)
+            # save raw samples
+            samples_path = os.path.join(out_dir, "samples.json")
+            with open(samples_path, "w") as f:
+                json.dump(results.get("samples", []), f, indent=2)
+            # save summary metrics
+            metrics_path = os.path.join(out_dir, "metrics.json")
+            with open(metrics_path, "w") as f:
+                json.dump(results.get("results", {}), f, indent=2)
+            print(f"→ samples → {samples_path}")
+            print(f"→ metrics → {metrics_path}")
+            import ipdb; ipdb.set_trace()   
+    
+            
             if methods.LOGGER is not None:
                 methods.LOGGER.log_lm_harness_results(LM_HARNESS_TASKS, results["results"])
     else: # Use PPL Evaluation
@@ -111,5 +130,5 @@ if __name__ == "__main__":
         print(ppl)
         if methods.LOGGER is not None:
             methods.LOGGER.log_ppl(ppl)
-    
+        
     finish_logger()

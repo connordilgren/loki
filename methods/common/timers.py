@@ -6,7 +6,9 @@ class Timers():
         self.timers = defaultdict(list)
         self.curr_index = defaultdict(int)
 
-    def start(self, key):
+    def start(self, key, sync=True):
+        if sync:
+            torch.cuda.synchronize()
         index = self.curr_index[key]
         timers = self.timers[key]
         assert index == len(timers) or index < len(timers)
@@ -15,7 +17,9 @@ class Timers():
         self.timers[key][index][0].record()
 
 
-    def stop(self, key):
+    def stop(self, key, sync=True):
+        if sync:
+            torch.cuda.synchronize()
         index = self.curr_index[key]
         self.timers[key][index][1].record()
         self.curr_index[key] += 1

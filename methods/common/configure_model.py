@@ -13,6 +13,8 @@ def get_topk_args(parser):
 def get_pca_args(parser):
     parser.add_argument("--top-r", type=float, default=-1, help="top r channels to consider," "set to -1 to use all channels")
     parser.add_argument("--use-pca-topk", action='store_true', default=False, help="use the PCA TopK algos")
+    parser.add_argument("--use-pca-topk-sparse", action='store_true', default=False, help="use the PCA TopK algos")
+    
     parser.add_argument("--rotary-type", type=str, default="postrotary", help="rotary type")
     parser.add_argument("--recent-ratio", type=float, default=-1, help="PcaTopK recent ratio," "set to -1 by default")
     parser.add_argument("--transform-dataset", type=str, default="wikitext", help="pca transform dataset - wikitext, bookcorpus, c4")
@@ -34,11 +36,15 @@ def get_modifier(args):
     elif args.use_pca_topk:
         method_name = "pca_topk"
         module_name = ".pca_topk.modify_" + args.model_type
+    elif args.use_pca_topk_sparse:
+        method_name = "pca_topk_sparse"
+        module_name = ".pca_topk_sparse.modify_" + args.model_type
     else:
         return None
       
     method_name = "make_" + args.model_type + "_attention_" + method_name
     module = import_module(module_name, package="methods")
+    
     method = getattr(module, method_name)
     return method
 

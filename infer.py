@@ -82,7 +82,7 @@ if  __name__ == "__main__":
     if args.method == "baseline":
         from methods.pca_topk.modify_llama_hf_timers import make_llama_attention_hf_timers
         make_llama_attention_hf_timers(args)
-
+    
     with parallelize(model_id):
         model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype).to('cuda')
 

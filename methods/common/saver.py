@@ -25,8 +25,8 @@ class TensorSaver:
 
     def save(self, category, tensor, extra_idx = None, extra_dir = ""):
         # Only save the tensor if the rank is 0
-        if torch.distributed.get_rank() != 0:
-            return
+        # if torch.distributed.get_rank() != 0:
+        #     return
         
         if not SAVE_TENSORS[category]:
             return

@@ -46,7 +46,7 @@ def get_model(
                 with parallelize(model_id):
                     if rank == 0:
                         print("Attempting to parallelize with fast low level API.")
-                    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, trust_remote_code=True).to(device)
+                    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, cache_dir= "/ephemeral/purva_exp/loki/.cache",trust_remote_code=True).to(device)
                     if rank == 0:
                         print("Parallelized with the fast low level API.!")
                     axonn_low_level_api_success = True
@@ -60,13 +60,14 @@ def get_model(
             if rank == 0:
                 print("Attempting to parallelize with the slow easy API.")
             with auto_parallelize():
-                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, trust_remote_code=True).to(device)
+                model  = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, cache_dir= "/ephemeral/purva_exp/loki/.cache",trust_remote_code=True).to(device)
             if rank == 0:
                 print("Parallelized with the slower auto parallelize API.")
     else:
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, force_download=True, trust_remote_code=True).to(device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, cache_dir= "/ephemeral/purva_exp/loki/.cache",trust_remote_code=True).to(device)
 
     return model
+
 
 def evaluate_ppl(model_id="facebook/opt-350m", 
             dataset="wikitext",
@@ -113,11 +114,11 @@ def evaluate_ppl(model_id="facebook/opt-350m",
         target_ids[:, :-trg_len] = -100
 
         with torch.no_grad():
-            with torch.cuda.amp.autocast(dtype=dtype):
-                if past_key_values is not None:
-                    outputs = model(input_ids.cuda(), past_key_values=copy.deepcopy(past_key_values), labels=target_ids.cuda())
-                else:
-                    outputs = model(input_ids.cuda(), labels=target_ids.cuda())
+            
+            if past_key_values is not None:
+                outputs = model(input_ids.cuda(), past_key_values=copy.deepcopy(past_key_values), labels=target_ids.cuda())
+            else:
+                outputs = model(input_ids.cuda(), labels=target_ids.cuda())
             # loss is calculated using CrossEntropyLoss which averages over valid labels
             # N.B. the model only calculates loss over trg_len - 1 labels, because it internally shifts the labels
             # to the left by 1.
@@ -128,10 +129,12 @@ def evaluate_ppl(model_id="facebook/opt-350m",
         prev_end_loc = end_loc
         if end_loc == seq_len:
             break
-
+    import ipdb; ipdb.set_trace()
     ppl = torch.exp(torch.stack(nlls).mean())
     return ppl
 
+    
+    
 if __name__ == "__main__":
     ppl = evaluate(model_id="facebook/opt-13b",use_axonn=True)
     print(ppl)

@@ -1,0 +1,3 @@
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_USE_CUDA_DSA=1
+CUDA_VISIBLE_DEVICES=4,5 python evaluate_compute_naive_sparse.py 
