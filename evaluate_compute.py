@@ -33,13 +33,6 @@ if __name__ == "__main__":
         for prompt_length in [512]:
             # for num_gen_steps in [64, 128, 256]:
             for num_gen_steps in [64]:
-                # Vanilla attention
-                # does not depend on topk, topr, stride
-                free_gpu_memory()
-                _, times_vanilla, _ = benchmark_attention(prompt_length=prompt_length, num_gen_steps=num_gen_steps, batch_size=16, pcatopk=False, sparse_transformer=False)
-                with open(f"compute_files/vanilla_prompt_{prompt_length}_gen_{num_gen_steps}.json", "w") as f:
-                    json.dump(times_vanilla, f, indent=2)
-
                 # for topk in [4, 8]:
                 for topk in [4]:
                     for topr in [4]:
@@ -53,26 +46,27 @@ if __name__ == "__main__":
                         
                         # Loki with attention-query-key sparsity
                         # print(f"\nRunning Loki with Attention-Query-Key Sparsity benchmark...")
-                        free_gpu_memory()
-                        times_sparsity, _ = benchmark_attention_apex(
-                            prompt_length=prompt_length, 
-                            num_gen_steps=num_gen_steps, 
-                            batch_size=16, 
-                            topk=prompt_length // topk, 
-                            topr=128 // topr, 
-                            vanilla=False,
-                            pcatopk=True,
-                            sparsity_type="attention-query-key",
-                            dtype=torch.float16
-                        )
-                        sparsity_filename = f"compute_files/attention_query_key_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json"
-                        print(f"Saving to {sparsity_filename}")
-                        with open(sparsity_filename, "w") as f:
-                            json.dump(times_sparsity, f, indent=2)
-                        print("Loki with Attention-Query-Key Sparsity Times:")
-                        for key, value in times_sparsity.items():
-                            print(f"  {key}: {value:.6f} s")
-                        print(f"Net time (minus cache updates): {times_sparsity.get('total', 0) - times_sparsity.get('cache-update', 0):.6f} s")
+                        if prompt_length <= 1024:
+                            free_gpu_memory()
+                            times_sparsity, _ = benchmark_attention_apex(
+                                prompt_length=prompt_length, 
+                                num_gen_steps=num_gen_steps, 
+                                batch_size=16, 
+                                topk=prompt_length // topk, 
+                                topr=128 // topr, 
+                                vanilla=False,
+                                pcatopk=True,
+                                sparsity_type="attention-query-key",
+                                dtype=torch.float16
+                            )
+                            sparsity_filename = f"compute_files/attention_query_key_prompt_{prompt_length}_gen_{num_gen_steps}_topk_{topk}_topr_{topr}.json"
+                            print(f"Saving to {sparsity_filename}")
+                            with open(sparsity_filename, "w") as f:
+                                json.dump(times_sparsity, f, indent=2)
+                            print("Loki with Attention-Query-Key Sparsity Times:")
+                            for key, value in times_sparsity.items():
+                                print(f"  {key}: {value:.6f} s")
+                            print(f"Net time (minus cache updates): {times_sparsity.get('total', 0) - times_sparsity.get('cache-update', 0):.6f} s")
 
                         # for stride in [128, 512]:
                         for stride in [128]:
