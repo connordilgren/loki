@@ -414,7 +414,7 @@ def micro_bench_actual_attention(cache, prompt_keys, num_layers, timers, num_gen
     timers.stop('total')
 
 @torch.no_grad()
-def benchmark_attention(batch_size=1,
+def benchmark_attention_apex(batch_size=1,
                         num_heads=32,
                         num_gen_steps=128,
                         prompt_length=3072,
