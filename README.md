@@ -18,6 +18,7 @@ python evaluate_compute_apex24.py
 ```
 
 ## Downstream Performance
+To run the downstream task on apex 2:4, setup lm-eval-harness version 0.4.8 and run 
 ```bash
-python evaluate_tasks.py
+bash run_lm_eval.sh
 ```
