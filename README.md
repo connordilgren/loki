@@ -22,4 +22,4 @@ To run the downstream task on apex 2:4, setup lm-eval-harness version 0.4.8 and 
 ```bash
 bash run_lm_eval.sh
 ```
-Our experiment runs are saved in `compute_files_apex24'`, compute_files_sparse_transformers, compute_files_naive_sparse and compute_files_loki. 
+Our experiment runs are saved in `compute_files_apex24'`, `compute_files_sparse_transformers`, `compute_files_naive_sparse` and `compute_files_loki`. 
