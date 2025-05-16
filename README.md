@@ -1,4 +1,16 @@
 # Sparse(r) Loki
+
+To setup the nvidia apex library, 
+```
+git clone https://github.com/NVIDIA/apex
+cd apex
+```
+
+Then, comment out "check_cuda_torch_binary_vs_bare_metal(CUDA_HOME)" in apex/setup.py
+```
+⁠python setup.py install --cpp_ext --cuda_ext
+```
+
 To setup the PCA transforms and tensors, please copy `/afs/shell.umd.edu/project/cmsc828/shared/pchiniya/cache/pca` to directory under loki `pca` and
 `/afs/shell.umd.edu/project/cmsc828/shared/pchiniya/cache/saved_tensors` to  `saved_tensors`.
 ## Compute Evaluation
