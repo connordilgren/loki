@@ -2,7 +2,15 @@
 
 ## Compute Evaluation
 
-Compute Benchmark for loki, sparse transformers + loki, unstructured QK sparsity, and
+Compute Benchmark for loki, sparse transformers + loki,
+```bash
+python evaluate_compute_sparse_transformers.py
+```
+
+Compute Benchmark for unstructured QK sparsity
+```bash
+python evaluate_compute_naive_sparse.py
+```
  
 Compute Benchmark for 2:4 structured sparsity
 ```bash
