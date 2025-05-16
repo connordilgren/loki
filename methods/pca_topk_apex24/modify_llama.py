@@ -148,7 +148,7 @@ def get_top_k_forward(args):
     return modified_forward
 
 
-def make_llama_attention_pca_topk_sparse(args):
+def make_llama_attention_pca_topk_apex24(args):
     print("Modifying Llama Attention -> TopK + 2:4-ASP Sparse Attention")
     if args.top_k <= 1:
         print(f"TopK% - {args.top_k}")
