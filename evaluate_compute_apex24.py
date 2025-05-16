@@ -1,4 +1,5 @@
-from methods.pca_topk.attention_benchmark_torch24 import benchmark_attention
+from methods.pca_topk.attention_benchmark_apex24 import benchmark_attention
+import benchmark_attention
 import json
 import torch
 import os 
