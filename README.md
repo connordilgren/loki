@@ -1,5 +1,6 @@
 # Sparse(r) Loki
-
+To setup the PCA transforms and tensors, please copy `/afs/shell.umd.edu/project/cmsc828/shared/pchiniya/cache/pca` to directory under loki `pca` and
+`/afs/shell.umd.edu/project/cmsc828/shared/pchiniya/cache/saved_tensors` to  `saved_tensors`.
 ## Compute Evaluation
 
 Compute Benchmark for loki, sparse transformers + loki,
