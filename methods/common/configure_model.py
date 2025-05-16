@@ -37,8 +37,8 @@ def get_modifier(args):
         method_name = "pca_topk"
         module_name = ".pca_topk.modify_" + args.model_type
     elif args.use_pca_topk_sparse:
-        method_name = "pca_topk_sparse"
-        module_name = ".pca_topk_sparse.modify_" + args.model_type
+        method_name = "pca_topk_apex24"
+        module_name = ".pca_topk_apex24.modify_" + args.model_type
     else:
         return None
       
